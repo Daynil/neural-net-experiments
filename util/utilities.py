@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from datetime import datetime
 from statistics import mean
 from time import time
@@ -72,9 +71,8 @@ class Timer:
         self.elapsed_loop_times.append(elapsed)
         return elapsed
 
-    def show_elapsed_loop_average(self, raw: bool = False):
-        average_runtime = mean(self.elapsed_loop_times)
-        if raw:
-            return average_runtime
-        else:
-            return format_timer_human(average_runtime)
+    def elapsed_loop_average(self):
+        return mean(self.elapsed_loop_times)
+
+    def fmt_elapsed_loop_average(self):
+        return format_timer_human(self.elapsed_loop_average())

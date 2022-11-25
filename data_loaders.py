@@ -1,28 +1,34 @@
 import math
 from pathlib import Path
-from typing import Any, Callable, List, TypeVar, Union
+from typing import (Any, Callable, Generic, List, Optional, Tuple, TypeVar,
+                    Union)
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 import torch.utils.data
-from torch import Tensor
-from torch.utils.data import Dataset, Subset, random_split
-from torchvision.io import read_image
+from torch import Tensor, nn
+from torch.utils.data import (ConcatDataset, Dataset, Subset, TensorDataset,
+                              random_split)
+from torchvision.io import ImageReadMode, read_image
 
 T_co = TypeVar("T_co", covariant=True)
 T = TypeVar("T")
 
 
-class MNISTImageDataset(Dataset[tuple[Tensor, Tensor]]):
+class MNISTImageDataset(TensorDataset):
     def __init__(
         self,
         annotations_file: Path,
         img_dir: Path,
         transform: Union[Callable[[Tensor], Tensor], None] = None,
         target_transform: Union[Callable[[Union[Tensor, Any]], Tensor], None] = None,
+        limit_data: Optional[int] = None,
     ):
-        self.img_labels = pd.read_csv(annotations_file, header=None, delimiter=" ")
+        img_labels = pd.read_csv(annotations_file, header=None, delimiter=" ")
+        if limit_data:
+            img_labels = img_labels[:limit_data]
+        self.img_labels = img_labels
         self.img_dir = img_dir
         self.transform = transform
         self.target_transform = target_transform
@@ -34,15 +40,18 @@ class MNISTImageDataset(Dataset[tuple[Tensor, Tensor]]):
         file_name = self.img_labels.iloc[idx, 0]
         label = self.img_labels.iloc[idx, 1]
         img_path = self.img_dir.joinpath(str(label)).joinpath(str(file_name))
-        image = read_image(str(img_path)).float() / 255
+        # image = read_image(str(img_path)).float() / 255
+        image = read_image(str(img_path), ImageReadMode.RGB).float() / 255
         if self.transform:
             image = self.transform(image)
         if self.target_transform:
             label = self.target_transform(label)
-        return image, torch.tensor(label)
+        else:
+            label = torch.tensor(label)
+        return image, label
 
 
-def split_datasets(dataset: Dataset[T], validation_percent: float) -> List[Subset[T]]:
+def split_datasets(dataset: TensorDataset, validation_percent: float):
 
     training_num, validation_num = math.floor(
         (1 - validation_percent) * len(dataset)
@@ -56,14 +65,37 @@ def split_datasets(dataset: Dataset[T], validation_percent: float) -> List[Subse
     )
 
 
-def preview_data_sample(data_loader: torch.utils.data.DataLoader[T]):
+def preview_data_sample(dataset: TensorDataset):
     figure = plt.figure(figsize=(8, 8))
     cols, rows = 3, 3
     for i in range(1, cols * rows + 1):
-        sample_idx = torch.randint(len(data_loader.dataset), size=(1,)).item()
-        img, label = data_loader.dataset[sample_idx]
+        sample_idx = torch.randint(len(dataset), size=(1,)).item()
+        img, label = dataset[sample_idx]
         figure.add_subplot(rows, cols, i)
-        plt.title(label.argmax())
+        plt.title(str(label.argmax().item()))
         plt.axis("off")
-        plt.imshow(img.squeeze().cpu(), cmap="gray")
+        plt.imshow(img.permute(1, 2, 0).cpu(), cmap="gray")
+    plt.show()
+
+
+def preview_tested_data_sample(dataset: TensorDataset, model: nn.Module):
+    figure = plt.figure(figsize=(8, 8))
+    cols, rows = 3, 3
+    for i in range(1, cols * rows + 1):
+        sample_idx = torch.randint(len(dataset), size=(1,)).item()
+        test_image, label = dataset[sample_idx]
+        figure.add_subplot(rows, cols, i)
+
+        logits = model(test_image.unsqueeze(0))
+        model_probabilities: Tensor = nn.Softmax(dim=1)(logits)
+        model_prediction = model_probabilities.argmax(1)
+        # print(model_probabilities)
+        # print(model_prediction)
+        model_confidence = model_probabilities[0][model_prediction]
+
+        plt.title(
+            f"Label: {label.argmax(0).item()} - Pred (prob): {model_prediction.item()} ({round(model_confidence.item() * 100, 3)}%)"
+        )
+        plt.axis("off")
+        plt.imshow(test_image.permute(1, 2, 0).cpu(), cmap="gray")
     plt.show()

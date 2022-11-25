@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 import torch.utils.data
 from torch import Tensor, nn
+from torchvision.models import resnet18
 from torchvision.transforms import Lambda
 
 import data_loaders
@@ -22,6 +23,7 @@ def get_data():
                 dim=0, index=torch.tensor(y), value=1
             )
         ),
+        # limit_data=5000,
     )
 
     train_dataset, valid_dataset = data_loaders.split_datasets(dataset, 0.1)
@@ -35,11 +37,12 @@ def get_data():
                 dim=0, index=torch.tensor(y), value=1
             )
         ),
+        # limit_data=10000,
     )
 
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=64)
-    valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=64)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=64)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=512)
+    valid_loader = torch.utils.data.DataLoader(valid_dataset, batch_size=512)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=512)
 
     return train_loader, valid_loader, test_loader
 
@@ -54,15 +57,17 @@ class SimpleNeuralNetwork(nn.Module):
         # operates on a single array (x@w)
         self.flatten = nn.Flatten()
         total_pixels_per_image = 28 * 28
-        hidden_neurons = 30
+        hidden_neurons = 512
         total_labels = 10  # 0 through 9 are the labels
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(total_pixels_per_image, hidden_neurons),
             nn.ReLU(),
+            nn.Linear(hidden_neurons, hidden_neurons),
+            nn.ReLU(),
             nn.Linear(hidden_neurons, total_labels),
         )
 
-    def forward(self, x: Tensor):
+    def forward(self, x: Tensor):  # type: ignore
         x = self.flatten(x)
         logits = self.linear_relu_stack(x)
         return logits
@@ -77,52 +82,77 @@ def manual_mnist_loss(predictions: Tensor, targets: Tensor):
     return ((targets - predictions) ** 2).sum()
 
 
-def run_model(message_queue: MessageQueue, client_request_queue: ClientRequestQueue):
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-    device = "cpu"
+def run_model(epochs: int, save_model_name: str = ""):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device = "cpu"
     print(f"Using {device} device")
+
+    torch.cuda.empty_cache()
 
     train_loader, valid_loader, test_loader = get_data()
 
-    # data_loaders.preview_data_sample(train_loader)
+    # data_loaders.preview_data_sample(train_loader.dataset)
 
-    simple_model = SimpleNeuralNetwork().to(device)
-    optimizer = torch.optim.SGD(simple_model.parameters(), lr=0.001)
+    # model = SimpleNeuralNetwork().to(device)
+    # model = torch.hub.load("pytorch/vision:v0.10.0", "resnet18", pretrained=False)
+    # model = resnet18(pretrained=False, num_classes=10).to(device)
+    model = resnet18(weights=None, num_classes=10).to(device)
+
+    # optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+    # Unclear why OneCycleLR isn't detected by types
+    # It is present in the module checking manually
+    scheduler = torch.optim.lr_scheduler.OneCycleLR(  # type: ignore
+        optimizer, max_lr=1, steps_per_epoch=len(train_loader), epochs=epochs
+    )
 
     learner = learning.Learner(
         # data_loaders=learning.DataLoaders(train_loader, valid_loader, test_loader),
-        data_loaders=learning.DataLoaders(test_loader, valid_loader, test_loader),
-        model=simple_model,
-        loss_function=manual_mnist_loss,
+        data_loaders=learning.DataLoaders(train_loader, valid_loader, test_loader),
+        model=model,
+        # loss_function=manual_mnist_loss,
+        loss_function=nn.CrossEntropyLoss(),
         optimizer=optimizer,
+        scheduler=scheduler,
         device=device,
-        message_queue=message_queue,
-        client_request_queue=client_request_queue,
     )
 
     # asyncio.create_task(learner.train_model(1))
-    learner.train_model(3)
+    learner.train_model(epochs)
+    if save_model_name:
+        torch.save(model.state_dict(), f"{save_model_name}.pth")
+
+
+def load_and_test_model(model_name: str):
+    train_loader, valid_loader, test_loader = get_data()
+
+    model = resnet18(weights=None, num_classes=10)
+    model.load_state_dict(torch.load(f"{model_name}.pth"))
+    # print(model.eval())
+    model.eval()
+
+    data_loaders.preview_tested_data_sample(test_loader.dataset, model)
+    return
+
+    test_image, label = test_loader.dataset[0]
+    logits = model(test_image.unsqueeze(0))
+    model_probabilities: Tensor = nn.Softmax(dim=1)(logits)
+    model_prediction = model_probabilities.argmax(1)
+    # print(model_probabilities)
+    # print(model_prediction)
+    model_confidence = model_probabilities[0][model_prediction]
+    print(
+        f"Model prediction: {model_prediction.item()}, Model confidence: {model_confidence.item() * 100}%"
+    )
+    print("Label: ", label.argmax(0).item())
 
 
 if __name__ == "__main__":
-    # device = "cuda" if torch.cuda.is_available() else "cpu"
-    device = "cpu"
-    print(f"Using {device} device")
+    # run_model(5)
+    # run_model(epochs=5, save_model_name="mnist_resnet18_onecyclelr")
+    load_and_test_model(model_name="mnist_resnet18_onecyclelr")
 
-    train_loader, valid_loader, test_loader = get_data()
+    # train_loader, valid_loader, test_loader = get_data()
 
-    # data_loaders.preview_data_sample(train_loader)
-
-    simple_model = SimpleNeuralNetwork().to(device)
-    optimizer = torch.optim.SGD(simple_model.parameters(), lr=0.001)
-
-    # learner = learning.Learner(
-    #     data_loaders=learning.DataLoaders(train_loader, valid_loader, test_loader),
-    #     model=simple_model,
-    #     loss_function=manual_mnist_loss,
-    #     optimizer=optimizer,
-    #     device=device,
-    #     message_queue==msg_queue,
-    # )
-
-    # learner.train_model(10)
+    # data_loaders.preview_data_sample(train_loader.dataset)
+    # image, label = train_loader.dataset[0]
