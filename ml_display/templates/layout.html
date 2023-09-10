@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang='en'>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        {% block head_base %}
+        <link rel='stylesheet' type='text/css' href='{{ base_path_reset or "" }}lib/bootstrap.css' />
+        <script type="text/javascript" src="{{ base_path_reset or "" }}lib/bootstrap.js"></script>
+        <script type="text/javascript" src="{{ base_path_reset or "" }}lib/htmx.min.js"></script>
+        <link rel="stylesheet" type="text/css" href="{{ base_path_reset or "" }}styles.css" />
+        {% endblock head_base %}
+
+        {% block title %}{% endblock title %}
+        {% block head %}{% endblock head %}
+    </head>
+    <body>
+        {% include 'navbar.html' %}
+        {% block content %}{% endblock content %}
+    </body>
+</html>

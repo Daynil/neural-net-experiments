@@ -1,0 +1,1 @@
+watchexec --restart --watch app --exts py,js,html,css -- python -m main

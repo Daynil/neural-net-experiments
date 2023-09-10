@@ -1,0 +1,394 @@
+:root {
+    --slate-50: #f8fafc;
+    --slate-100: #f1f5f9;
+    --slate-200: #e2e8f0;
+    --slate-300: #cbd5e1;
+    --slate-400: #94a3b8;
+    --slate-500: #64748b;
+    --slate-600: #475569;
+    --slate-700: #334155;
+    --slate-800: #1e293b;
+    --slate-900: #0f172a;
+    --slate-950: #020617;
+
+    --sky-50: #f0f9ff;
+    --sky-100: #e0f2fe;
+    --sky-200: #bae6fd;
+    --sky-300: #7dd3fc;
+    --sky-400: #38bdf8;
+    --sky-500: #0ea5e9;
+    --sky-600: #0284c7;
+    --sky-700: #0369a1;
+    --sky-800: #075985;
+    --sky-900: #0c4a6e;
+    --sky-950: #082f49;
+
+    --red-50: #fef2f2;
+    --red-100: #fee2e2;
+    --red-200: #fecaca;
+    --red-300: #fca5a5;
+    --red-400: #f87171;
+    --red-500: #ef4444;
+    --red-600: #dc2626;
+    --red-700: #b91c1c;
+    --red-800: #991b1b;
+    --red-900: #7f1d1d;
+    --red-950: #450a0a;
+
+    --green-50: #f0fdf4;
+    --green-100: #dcfce7;
+    --green-200: #bbf7d0;
+    --green-300: #86efac;
+    --green-400: #4ade80;
+    --green-500: #22c55e;
+    --green-600: #16a34a;
+    --green-700: #15803d;
+    --green-800: #166534;
+    --green-900: #14532d;
+    --green-950: #052e16;
+
+    --yellow-50: #fefce8;
+    --yellow-100: #fef9c3;
+    --yellow-200: #fef08a;
+    --yellow-300: #fde047;
+    --yellow-400: #facc15;
+    --yellow-500: #eab308;
+    --yellow-600: #ca8a04;
+    --yellow-700: #a16207;
+    --yellow-800: #854d0e;
+    --yellow-900: #713f12;
+    --yellow-950: #422006;
+
+    --submenu-hover-bg: rgb(229 231 235);
+
+    --text-xs: 0.75rem; /* 12px */
+    --text-sm: 0.875rem; /* 14px */
+    --text-base: 1rem; /* 16px */
+    --text-lg: 1.125rem; /* 18px */
+    --text-xl: 1.25rem; /* 20px */
+    --text-2xl: 1.5rem; /* 24px */
+    --text-3xl: 1.875rem; /* 30px */
+    --text-4xl: 2.25rem; /* 36px */
+}
+
+@font-face {
+    font-family: 'Inter-Regular';
+    /* Built files will be in the same folder, ignore */
+    /*noinspection CssUnknownTarget*/
+    src: url('lib/Inter-Regular.ttf');
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Inter-Regular', sans-serif;
+}
+
+h1 {
+    max-width: var(--bs-breakpoint-md);
+    text-align: center;
+    font-size: 46px;
+    margin: 40px auto;
+}
+
+article, main {
+    max-width: var(--bs-breakpoint-md);
+    margin: 10px auto;
+    font-size: 18px;
+    line-height: 26px;
+    color: var(--slate-950)
+}
+
+@media (max-width: 768px) {
+    article, main {
+        padding: 0 20px;
+    }
+}
+
+article, main .wp-block-image {
+    margin: auto;
+    text-align: center;
+}
+
+article, main figure {
+    margin: 0;
+}
+
+article, main figure img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 10px;
+    margin: 10px auto;
+}
+
+article, main a {
+    color: var(--sky-600);
+
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+article, main a:hover {
+    color: var(--sky-500);
+}
+
+.book {
+    cursor: pointer;
+    padding: 6px 14px;
+    border-radius: 10px;
+    margin-top: 4px;
+
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+.book:hover {
+    background-color: var(--slate-200);
+}
+
+.add-book-form {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 50px;
+    max-width: 400px;
+}
+
+.add-book-inputs {
+    display: flex;
+    flex-direction: column;
+}
+
+.add-book-form input {
+    margin-right: 10px
+}
+
+.add-book-form button {
+    margin-top: 20px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--slate-700);
+    letter-spacing: 0.5px;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    max-width: 400px;
+    margin: auto;
+}
+
+.auth-form button {
+    margin-top: 20px;
+}
+
+.auth-form input[type="email"] {
+    margin-bottom: 20px
+}
+
+input, textarea {
+    border: 1px solid var(--slate-300);
+    border-radius: 10px;
+    padding: 4px 10px;
+
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+}
+
+input:hover, textarea:hover {
+    border-color: var(--sky-600);
+}
+
+input:focus, textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--sky-600);
+}
+
+.htmx-indicator {
+    opacity: 0;
+    transition: opacity 150ms ease-in;
+}
+
+.alert {
+    display: flex;
+    align-items: start;
+
+    padding: 14px 20px;
+    margin: 10px 0;
+
+    font-size: var(--text-sm);
+    border-radius: 10px;
+}
+
+.alert svg {
+    width: var(--text-2xl);
+    flex-shrink: 0;
+    margin-right: 10px;
+}
+
+.alert h3 {
+    font-size: var(--text-base);
+    font-weight: 600;
+}
+
+.alert-bad {
+    background-color: var(--red-50);
+    color: var(--red-700);
+}
+
+.alert-bad svg {
+    color: var(--red-400);
+}
+
+.alert-bad h3 {
+    color: var(--red-800);
+}
+
+.alert-good {
+    background-color: var(--green-50);
+    color: var(--green-700);
+}
+
+.alert-good svg {
+    color: var(--green-400);
+}
+
+.alert-good h3 {
+    color: var(--green-800);
+}
+
+.alert-alert {
+    background-color: var(--yellow-50);
+    color: var(--yellow-700);
+}
+
+.alert-alert svg {
+    color: var(--yellow-400);
+}
+
+.alert-alert h3 {
+    color: var(--yellow-800);
+}
+
+.alert-info {
+    background-color: var(--sky-50);
+    color: var(--sky-700);
+}
+
+.alert-info svg {
+    color: var(--sky-400);
+}
+
+.alert-info h3 {
+    color: var(--sky-800);
+}
+
+/*** Bootstrap Customizations ***/
+
+.btn {
+    background-color: var(--sky-600);
+    color: white;
+    border-radius: 10px;
+    font-weight: bold;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+
+    justify-content: center;
+    margin: auto;
+    width: 100%;
+}
+
+.btn:hover {
+    background-color: var(--sky-500);
+    color: white;
+}
+
+.btn:focus, .btn:active {
+    background-color: var(--sky-500) !important;
+    color: white !important;
+    box-shadow: 0 0 0 2px var(--sky-600);
+}
+
+.navbar {
+    /*max-width: var(--bs-breakpoint-md) !important;*/
+    background-color: transparent !important;
+    border-top: 6px solid var(--sky-600);
+    padding: 0 110px !important;
+}
+
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    width: 50px;
+    margin-right: 120px;
+}
+
+.navbar-brand div {
+    margin-left: 8px;
+    color: var(--slate-950)
+}
+
+.nav-side {
+    align-self: flex-end;
+}
+
+.nav-item {
+    margin: 0 4px !important;
+}
+
+.nav-link {
+    color: var(--slate-950) !important;
+    border-radius: 10px;
+    padding: 8px 20px !important;
+
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+}
+
+.nav-link:hover {
+    background-color: var(--slate-200) !important;
+}
+
+.nav-link.active {
+    background-color: var(--slate-300) !important;
+}
+
+.dropdown-item {
+    transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 200ms;
+}
+
+.dropdown-item:hover {
+    background-color: var(--submenu-hover-bg);
+    cursor: pointer;
+}
+
+@media (max-width: 992px) {
+    .navbar-collapse {
+        margin-top: 4px !important;
+    }
+
+    .nav-item {
+        margin-top: 4px !important;
+    }
+}
+
+.navbar-toggler {
+    border: none;
+    color: var(--slate-950) !important;
+}
+
+/*** End Bootstrap Customizations ***/

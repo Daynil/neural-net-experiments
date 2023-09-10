@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Black">
+    <option name="pathToExecutable" value="C:\Users\Danny\AppData\Roaming\Python\Python39\Scripts\black.exe" />
+    <option name="sdkUUID" value="648eb967-1e08-453c-8658-d68682fec864" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="C:\Users\Danny\miniconda3" project-jdk-type="Python SDK" />
+</project>

@@ -124,33 +124,21 @@ def run_model(epochs: int, save_model_name: str = ""):
 
 
 def load_and_test_model(model_name: str):
-    train_loader, valid_loader, test_loader = get_data()
+    _train_loader, _valid_loader, test_loader = get_data()
 
     model = resnet18(weights=None, num_classes=10)
     model.load_state_dict(torch.load(f"{model_name}.pth"))
     # print(model.eval())
     model.eval()
 
-    data_loaders.preview_tested_data_sample(test_loader.dataset, model)
-    return
-
-    test_image, label = test_loader.dataset[0]
-    logits = model(test_image.unsqueeze(0))
-    model_probabilities: Tensor = nn.Softmax(dim=1)(logits)
-    model_prediction = model_probabilities.argmax(1)
-    # print(model_probabilities)
-    # print(model_prediction)
-    model_confidence = model_probabilities[0][model_prediction]
-    print(
-        f"Model prediction: {model_prediction.item()}, Model confidence: {model_confidence.item() * 100}%"
-    )
-    print("Label: ", label.argmax(0).item())
+    data_loaders.preview_tested_data_sample(test_loader.dataset, model)  # type: ignore
 
 
 if __name__ == "__main__":
     # run_model(5)
     # run_model(epochs=5, save_model_name="mnist_resnet18_onecyclelr")
     load_and_test_model(model_name="mnist_resnet18_onecyclelr")
+    # print(torch.cuda.is_available())
 
     # train_loader, valid_loader, test_loader = get_data()
 

@@ -2,27 +2,20 @@ from dataclasses import dataclass
 from time import sleep
 from typing import Any, Callable, Generic, Literal, Optional, TypeVar
 
+import matplotlib.pyplot as plt
 import torch
 from colorama import deinit
 from rich.console import Console, Group
 from rich.live import Live
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskID,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
-)
+from rich.progress import (BarColumn, Progress, SpinnerColumn, TaskID,
+                           TaskProgressColumn, TextColumn, TimeElapsedColumn,
+                           TimeRemainingColumn)
 from rich.table import Column, Table
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from message_queue import ClientRequestQueue, LearnerStats, MessageQueue
 from util.random_names_generator import generate_random_name
-
 # from message_queue import message_bus, msg_queue
 from util.utilities import Timer
 
@@ -40,11 +33,19 @@ class DataLoaders(Generic[T]):
     test: DataLoader[T]
 
 
+@dataclass
+class EpochData:
+    loss: float
+    accuracy: float
+
+
 class Learner:
     run_id: str
     current_total_epochs: int
     current_epoch_num: int
     task_id: Optional[TaskID] = None
+    epoch_data: list[EpochData]
+    max_epoch_table_rows = 10
 
     def __init__(
         self,
@@ -63,6 +64,29 @@ class Learner:
         self.device = device
         self.timer = Timer()
         self.run_id = generate_random_name()
+        self.epoch_data = []
+
+    def get_epoch_data_table(self):
+        epoch_table = Table(title="Epochs")
+        epoch_table.add_column("Epoch")
+        epoch_table.add_column("Loss")
+        epoch_table.add_column("Accuracy")
+
+        start_row = (
+            0
+            if len(self.epoch_data) <= self.max_epoch_table_rows
+            else len(self.epoch_data) - self.max_epoch_table_rows
+        )
+        for idx, epoch in enumerate(self.epoch_data[start_row:]):
+            epoch_table.add_row(
+                str(idx + 1 + start_row),
+                f"{epoch.loss:>8f}",
+                f"{100*epoch.accuracy:>0.1f}%",
+            )
+        return epoch_table
+
+    def plot_epoch_data(self):
+        plt.plot(range(len(self.epoch_data)), [epoch.loss for epoch in self.epoch_data])
 
     def train_loop(self, progress: Progress):
         num_batches = len(self.data_loaders.train)
@@ -156,11 +180,6 @@ class Learner:
 
         console = Console(record=True)
 
-        epoch_table = Table(title="Epochs")
-        epoch_table.add_column("Epoch")
-        epoch_table.add_column("Loss")
-        epoch_table.add_column("Accuracy")
-
         progress_epoch = Progress(
             SpinnerColumn(),
             TextColumn(
@@ -172,6 +191,7 @@ class Learner:
             TimeRemainingColumn(),
             TimeElapsedColumn(),
             TextColumn("{task.completed} / {task.total}"),
+            TextColumn("{task.fields[loss]} loss"),
             console=console,
             transient=False,
         )
@@ -192,18 +212,27 @@ class Learner:
             transient=False,
         )
 
-        group = Group(progress_epoch, progress, epoch_table)
-
-        with Live(group, refresh_per_second=10):
-            training_epochs = progress_epoch.add_task("[red]Epochs", total=epochs)
-            for epoch in range(epochs):
-                self.current_epoch_num = epoch + 1
+        with Live(
+            Group(progress_epoch, progress, self.get_epoch_data_table()),
+            refresh_per_second=20,
+        ) as live:
+            training_epochs = progress_epoch.add_task(
+                "[red]Epochs", total=epochs, loss=0.0
+            )
+            for epoch in range(1, epochs + 1):
+                self.current_epoch_num = epoch
                 self.train_loop(progress)
-                progress_epoch.update(training_epochs, advance=1)
                 correct, valid_loss = self.valid_loop(progress)
-                epoch_table.add_row(
-                    str(epoch), f"{valid_loss:>8f}", f"{100*correct:>0.1f}%"
+                progress_epoch.update(
+                    training_epochs, advance=1, loss=round(valid_loss, 4)
                 )
+                self.epoch_data.append(EpochData(valid_loss, correct))
+
+                live.update(
+                    Group(progress_epoch, progress, self.get_epoch_data_table())
+                )
+            # Final loss doesn't print in table for some reason
+            print(f"Final loss: {self.epoch_data[-1].loss}")
 
 
 if __name__ == "__main__":

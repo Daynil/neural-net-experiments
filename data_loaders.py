@@ -1,15 +1,14 @@
 import math
 from pathlib import Path
-from typing import (Any, Callable, Generic, List, Optional, Tuple, TypeVar,
-                    Union)
+from random import random, randint
+from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 import torch.utils.data
 from torch import Tensor, nn
-from torch.utils.data import (ConcatDataset, Dataset, Subset, TensorDataset,
-                              random_split)
+from torch.utils.data import ConcatDataset, Dataset, Subset, TensorDataset, random_split
 from torchvision.io import ImageReadMode, read_image
 
 T_co = TypeVar("T_co", covariant=True)
@@ -17,6 +16,10 @@ T = TypeVar("T")
 
 
 class MNISTImageDataset(TensorDataset):
+    """
+    https://pytorch.org/tutorials/beginner/basics/data_tutorial.html#creating-a-custom-dataset-for-your-files
+    """
+
     def __init__(
         self,
         annotations_file: Path,
@@ -52,7 +55,6 @@ class MNISTImageDataset(TensorDataset):
 
 
 def split_datasets(dataset: TensorDataset, validation_percent: float):
-
     training_num, validation_num = math.floor(
         (1 - validation_percent) * len(dataset)
     ), math.floor(0.1 * len(dataset))
@@ -69,12 +71,24 @@ def preview_data_sample(dataset: TensorDataset):
     figure = plt.figure(figsize=(8, 8))
     cols, rows = 3, 3
     for i in range(1, cols * rows + 1):
-        sample_idx = torch.randint(len(dataset), size=(1,)).item()
+        sample_idx = randint(0, len(dataset))
         img, label = dataset[sample_idx]
         figure.add_subplot(rows, cols, i)
         plt.title(str(label.argmax().item()))
         plt.axis("off")
-        plt.imshow(img.permute(1, 2, 0).cpu(), cmap="gray")
+        """
+        plt.imshow expects the image tensor to have the shape (height, width, channels), 
+        while PyTorch tensors are usually channel first, meaning they have the shape (channels, height, width). 
+        Therefore, you need to use img.permute(1, 2, 0) 
+        to reshape the image tensor to match the expected shape for plt.imshow.
+        This call to permute means we are moving:
+            - channels (in pytorch the first dim, 0) to the last
+            - height (in pytorch the 2nd dim, 1) to first
+            - width (in pytorch, the 3rd dim, 2) to second
+        
+        Matplotlib also cannot load from gpu, so we transfer our image tensor to cpu.
+        """
+        plt.imshow(img.permute(1, 2, 0).cpu())
     plt.show()
 
 
@@ -82,7 +96,7 @@ def preview_tested_data_sample(dataset: TensorDataset, model: nn.Module):
     figure = plt.figure(figsize=(8, 8))
     cols, rows = 3, 3
     for i in range(1, cols * rows + 1):
-        sample_idx = torch.randint(len(dataset), size=(1,)).item()
+        sample_idx = randint(0, len(dataset))
         test_image, label = dataset[sample_idx]
         figure.add_subplot(rows, cols, i)
 
