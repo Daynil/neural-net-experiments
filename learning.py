@@ -7,15 +7,23 @@ import torch
 from colorama import deinit
 from rich.console import Console, Group
 from rich.live import Live
-from rich.progress import (BarColumn, Progress, SpinnerColumn, TaskID,
-                           TaskProgressColumn, TextColumn, TimeElapsedColumn,
-                           TimeRemainingColumn)
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+    TimeRemainingColumn,
+)
 from rich.table import Column, Table
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from message_queue import ClientRequestQueue, LearnerStats, MessageQueue
 from util.random_names_generator import generate_random_name
+
 # from message_queue import message_bus, msg_queue
 from util.utilities import Timer
 
@@ -33,6 +41,7 @@ class DataLoaders(Generic[T]):
     test: DataLoader[T]
 
 
+# TODO add both train and valid loss here and in display graph
 @dataclass
 class EpochData:
     loss: float
@@ -47,9 +56,10 @@ class Learner:
     epoch_data: list[EpochData]
     max_epoch_table_rows = 10
 
+    # TODO: add metric_function, so we can customize the display metric instead of just accuracy
     def __init__(
         self,
-        data_loaders: DataLoaders[tuple[Tensor, Tensor]],
+        data_loaders: DataLoaders[tuple[Tensor, ...]],
         model: nn.Module,
         loss_function: Callable[[Tensor, Tensor], Tensor],
         optimizer: Any,
@@ -89,6 +99,7 @@ class Learner:
         plt.plot(range(len(self.epoch_data)), [epoch.loss for epoch in self.epoch_data])
 
     def train_loop(self, progress: Progress):
+        # Setup progress bars and timers
         num_batches = len(self.data_loaders.train)
         batch_size = 0
         if self.task_id is None:
@@ -100,20 +111,29 @@ class Learner:
             progress.update(
                 self.task_id, description="[green]Training", total=num_batches
             )
+
+        # Main training loop
         for batch, (xb, yb) in enumerate(self.data_loaders.train):
             if batch == 0:
                 batch_size = len(xb)
-            # Compute prediction and loss
+
+            # Forward pass to get batch predictions
             predictions = self.model(xb.to(self.device))
+            # Calculate loss on batch predictions based on batch labels
             loss = self.loss_function(predictions, yb.to(self.device))
 
-            # Backpropagation
+            # Gradients accumulate by default - reset for next batch.
             self.optimizer.zero_grad()
+            # Backpropagation on the loss
+            # (compute the gradient of the loss function with respect to every model parameter)
             loss.backward()
+            # Update the parameters/weights based on the loss gradients and the learning rate
+            # E.g. with stochastic gradient descent or adam
             self.optimizer.step()
             if self.scheduler:
                 self.scheduler.step()
 
+            # Finish progress bars and timers
             self.timer.track_elapsed_loop()
 
             speed = 1 / (self.timer.elapsed_loop_average() / batch_size)
@@ -128,6 +148,7 @@ class Learner:
             )
 
     def valid_loop(self, progress: Progress):
+        # Setup progress bars and timers
         valid_loader = (
             self.data_loaders.valid
             if self.data_loaders.valid
@@ -147,7 +168,10 @@ class Learner:
                 self.task_id, description="[cyan]Validating", total=num_batches
             )
 
-        with torch.no_grad():
+        # Validation loop
+        # torch.no_grad is the old context manager
+        # with torch.no_grad():
+        with torch.inference_mode():
             for batch, (xb, yb) in enumerate(valid_loader):
                 if batch == 0:
                     batch_size = len(xb)
