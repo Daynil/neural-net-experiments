@@ -1,6 +1,6 @@
 import math
 from pathlib import Path
-from random import random, randint
+from random import randint, random
 from typing import Any, Callable, Generic, List, Optional, Tuple, TypeVar, Union
 
 import matplotlib.pyplot as plt
@@ -74,7 +74,9 @@ def preview_data_sample(dataset: TensorDataset):
         sample_idx = randint(0, len(dataset))
         img, label = dataset[sample_idx]
         figure.add_subplot(rows, cols, i)
-        plt.title(str(label.argmax().item()))
+        # plt.title(str(label.argmax().item()))
+        print(label.argmax())
+        plt.title(dataset.get_label_name(label.argmax().item()))  # type: ignore
         plt.axis("off")
         """
         plt.imshow expects the image tensor to have the shape (height, width, channels), 
