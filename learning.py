@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 from time import sleep
 from typing import Any, Callable, Generic, Literal, Optional, TypeVar
 
@@ -25,7 +26,7 @@ from message_queue import ClientRequestQueue, LearnerStats, MessageQueue
 from util.random_names_generator import generate_random_name
 
 # from message_queue import message_bus, msg_queue
-from util.utilities import Timer
+from util.utilities import Timer, format_timer_human
 
 T = TypeVar("T")
 
@@ -41,11 +42,16 @@ class DataLoaders(Generic[T]):
     test: DataLoader[T]
 
 
-# TODO add both train and valid loss here and in display graph
 @dataclass
 class EpochData:
-    loss: float
-    accuracy: float
+    train_loss: float
+    valid_loss: float
+    metric: float
+    time_sec: float
+
+
+def accuracy(predictions: Tensor, labels: Tensor) -> Tensor:
+    return (predictions.argmax(1) == labels.argmax(1).type(torch.float)).sum()
 
 
 class Learner:
@@ -56,19 +62,21 @@ class Learner:
     epoch_data: list[EpochData]
     max_epoch_table_rows = 10
 
-    # TODO: add metric_function, so we can customize the display metric instead of just accuracy
     def __init__(
         self,
         data_loaders: DataLoaders[tuple[Tensor, ...]],
         model: nn.Module,
         loss_function: Callable[[Tensor, Tensor], Tensor],
         optimizer: Any,
+        metric_function: Callable[[Tensor, Tensor], Tensor],
         device: Literal["cuda", "cpu"],
         scheduler: Optional[Any] = None,
     ) -> None:
         self.data_loaders = data_loaders
         self.model = model
+        self.model.to(device)
         self.loss_function = loss_function
+        self.metric_function = metric_function
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.device = device
@@ -79,8 +87,10 @@ class Learner:
     def get_epoch_data_table(self):
         epoch_table = Table(title="Epochs")
         epoch_table.add_column("Epoch")
-        epoch_table.add_column("Loss")
-        epoch_table.add_column("Accuracy")
+        epoch_table.add_column("Train Loss")
+        epoch_table.add_column("Valid Loss")
+        epoch_table.add_column("Metric")
+        epoch_table.add_column("Time")
 
         start_row = (
             0
@@ -90,13 +100,26 @@ class Learner:
         for idx, epoch in enumerate(self.epoch_data[start_row:]):
             epoch_table.add_row(
                 str(idx + 1 + start_row),
-                f"{epoch.loss:>8f}",
-                f"{100*epoch.accuracy:>0.1f}%",
+                f"{epoch.train_loss:>8f}",
+                f"{epoch.valid_loss:>8f}",
+                f"{100*epoch.metric:>0.1f}%",
+                format_timer_human(epoch.time_sec, clock_style=True),
             )
         return epoch_table
 
     def plot_epoch_data(self):
-        plt.plot(range(len(self.epoch_data)), [epoch.loss for epoch in self.epoch_data])
+        plt.plot(
+            range(len(self.epoch_data)),
+            [epoch.train_loss for epoch in self.epoch_data],
+            label="Train",
+        )
+        plt.plot(
+            range(len(self.epoch_data)),
+            [epoch.valid_loss for epoch in self.epoch_data],
+            label="Valid",
+        )
+        plt.legend()
+        plt.title("Loss")
 
     def train_loop(self, progress: Progress):
         # Setup progress bars and timers
@@ -112,7 +135,11 @@ class Learner:
                 self.task_id, description="[green]Training", total=num_batches
             )
 
+        train_loss, avg_loss = 0, 0
+
         # Main training loop
+        self.model.train()
+        self.timer.reset_timer()
         for batch, (xb, yb) in enumerate(self.data_loaders.train):
             if batch == 0:
                 batch_size = len(xb)
@@ -121,6 +148,7 @@ class Learner:
             predictions = self.model(xb.to(self.device))
             # Calculate loss on batch predictions based on batch labels
             loss = self.loss_function(predictions, yb.to(self.device))
+            train_loss += loss.item()
 
             # Gradients accumulate by default - reset for next batch.
             self.optimizer.zero_grad()
@@ -134,18 +162,20 @@ class Learner:
                 self.scheduler.step()
 
             # Finish progress bars and timers
-            self.timer.track_elapsed_loop()
+            speed = ((batch + 1) * batch_size) / float(
+                self.timer.show_elapsed_total(raw=True)
+            )
 
-            speed = 1 / (self.timer.elapsed_loop_average() / batch_size)
-
-            loss_value, current = loss.item(), batch * batch_size
+            avg_loss = train_loss / ((batch + 1) * batch_size)
 
             progress.update(
                 self.task_id,
                 advance=1,
                 speed=round(speed, 2),
-                loss=round(loss_value, 2),
+                loss=round(avg_loss, 4),
             )
+
+        return avg_loss
 
     def valid_loop(self, progress: Progress):
         # Setup progress bars and timers
@@ -157,7 +187,7 @@ class Learner:
         size = len(valid_loader.dataset)  # type: ignore
         num_batches = len(valid_loader)
         batch_size = 0
-        valid_loss, correct = 0, 0
+        valid_loss, avg_loss, metric = 0, 0, 0
         if self.task_id is None:
             self.task_id = progress.add_task(
                 "[cyan]Validating", total=num_batches, speed="--", loss="--"
@@ -171,7 +201,10 @@ class Learner:
         # Validation loop
         # torch.no_grad is the old context manager
         # with torch.no_grad():
+        # Also set model to eval mode
+        self.model.eval()
         with torch.inference_mode():
+            self.timer.reset_timer()
             for batch, (xb, yb) in enumerate(valid_loader):
                 if batch == 0:
                     batch_size = len(xb)
@@ -179,27 +212,30 @@ class Learner:
                 predictions = self.model(xb.to(self.device))
                 yb = yb.to(self.device)
                 valid_loss += self.loss_function(predictions, yb).item()
-                correct += (
-                    (predictions.argmax(1) == yb.argmax(1))
-                    .type(torch.float)
-                    .sum()
-                    .item()
+                metric += self.metric_function(predictions, yb).item()
+
+                speed = ((batch + 1) * batch_size) / float(
+                    self.timer.show_elapsed_total(raw=True)
                 )
 
-                self.timer.track_elapsed_loop()
+                avg_loss = valid_loss / ((batch + 1) * batch_size)
 
-                speed = 1 / (self.timer.elapsed_loop_average() / batch_size)
+                progress.update(
+                    self.task_id,
+                    advance=1,
+                    speed=round(speed, 2),
+                    loss=round(avg_loss, 4),
+                )
 
-                progress.update(self.task_id, advance=1, speed=round(speed, 2))
+        # Average metric
+        metric /= size
 
-        # Average loss and accuracy so far
-        valid_loss /= num_batches
-        correct /= size
-
-        return correct, valid_loss
+        return avg_loss, metric
 
     def train_model(self, epochs: int):
         self.timer.reset_timer()
+        total_timer = Timer()
+        total_timer.reset_timer()
         self.current_total_epochs = epochs
 
         console = Console(record=True)
@@ -241,22 +277,28 @@ class Learner:
             refresh_per_second=20,
         ) as live:
             training_epochs = progress_epoch.add_task(
-                "[red]Epochs", total=epochs, loss=0.0
+                "[dark_violet]Epochs", total=epochs, loss=0.0
             )
             for epoch in range(1, epochs + 1):
                 self.current_epoch_num = epoch
-                self.train_loop(progress)
-                correct, valid_loss = self.valid_loop(progress)
+                train_loss = self.train_loop(progress)
+                valid_loss, metric = self.valid_loop(progress)
                 progress_epoch.update(
                     training_epochs, advance=1, loss=round(valid_loss, 4)
                 )
-                self.epoch_data.append(EpochData(valid_loss, correct))
+
+                self.epoch_data.append(
+                    EpochData(
+                        train_loss, valid_loss, metric, total_timer.track_elapsed_loop()
+                    )
+                )
 
                 live.update(
                     Group(progress_epoch, progress, self.get_epoch_data_table())
                 )
-            # Final loss doesn't print in table for some reason
-            print(f"Final loss: {self.epoch_data[-1].loss}")
+
+        # Final loss doesn't print in table for some reason
+        console.print(self.get_epoch_data_table())
 
 
 if __name__ == "__main__":

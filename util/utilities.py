@@ -8,14 +8,18 @@ import numpy as np
 import torch
 
 
-def format_timer_human(seconds: float):
+def format_timer_human(seconds: float, clock_style=False):
     """
     Format timer results from raw seconds to human readable min/sec
     """
-    if int(seconds // 60) == 0:
-        return f"{int(seconds % 60)} sec"
+    minutes, seconds = divmod(seconds, 60)
+    if not clock_style:
+        if not minutes:
+            return f"{int(seconds % 60)} sec"
+        else:
+            return f"{int(seconds // 60)} min {int(seconds % 60)} sec"
     else:
-        return f"{int(seconds // 60)} min {int(seconds % 60)} sec"
+        return f"{int(minutes):02d}:{int(seconds):02d}"
 
 
 class Timer:
@@ -37,7 +41,7 @@ class Timer:
 
     def show_elapsed_total(self, raw: bool = False):
         """
-        Get elapsed time since last check
+        Get total elapsed time
         Args:
             raw: min/sec string default, float seconds if raw
         """
