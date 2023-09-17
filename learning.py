@@ -1,12 +1,15 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from time import sleep
 from typing import Any, Callable, Generic, Literal, Optional, TypeVar
 
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from colorama import deinit
 from rich.console import Console, Group
+from rich.layout import Layout
 from rich.live import Live
 from rich.progress import (
     BarColumn,
@@ -121,18 +124,77 @@ class Learner:
         plt.legend()
         plt.title("Loss")
 
+    def learning_rate_find(self, start_lr=1e-7, end_lr=1):
+        """
+        Search for an optimal learning rate by incrementing from a very
+        low learning rate to a very high one across 1 epoch.
+
+        https://github.com/fastai/fastbook/blob/master/05_pet_breeds.ipynb
+        Section: The Learning Rate Finder
+        """
+        num_batches = len(self.data_loaders.train)
+        lrs = np.geomspace(start_lr, end_lr, num=num_batches)
+        losses = []
+
+        min_loss = -1
+
+        initial_weights = deepcopy(self.model.state_dict())
+
+        # console = Console(record=True)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            TimeElapsedColumn(),
+        ) as progress:
+            task = progress.add_task(
+                "[bold cyan]Finding learning rates...", total=num_batches
+            )
+            self.model.train()
+            for batch, (xb, yb) in enumerate(self.data_loaders.train):
+                for param_group in self.optimizer.param_groups:
+                    param_group["lr"] = lrs[batch]
+
+                predictions = self.model(xb.to(self.device))
+                loss = self.loss_function(predictions, yb.to(self.device))
+                losses.append(loss.item())
+
+                if losses[-1] < min_loss or min_loss == -1:
+                    min_loss = losses[-1]
+
+                # Stop if loss spikes beyond a minimum
+                if losses[-1] > min_loss * 3.5:
+                    print("Early stop due to spike in min loss.")
+                    break
+
+                self.optimizer.zero_grad()
+                loss.backward()
+
+                self.optimizer.lr = lrs[-1]
+                self.optimizer.step()
+                progress.update(task, advance=1)
+
+        self.model.load_state_dict(initial_weights)
+
+        plt.semilogx(lrs[: len(losses)], losses)
+        min_idx = losses.index(min(losses))
+        plt.title(f"Max learning rate: {lrs[min_idx]:0.4f}")
+        plt.show()
+
     def train_loop(self, progress: Progress):
         # Setup progress bars and timers
         num_batches = len(self.data_loaders.train)
         batch_size = 0
         if self.task_id is None:
             self.task_id = progress.add_task(
-                "[green]Training", total=num_batches, speed=0.0, loss=0.0
+                "[bold green]Training", total=num_batches, speed=0.0, loss=0.0
             )
         else:
             progress.reset(self.task_id)
             progress.update(
-                self.task_id, description="[green]Training", total=num_batches
+                self.task_id, description="[bold green]Training", total=num_batches
             )
 
         train_loss, avg_loss = 0, 0
@@ -190,12 +252,12 @@ class Learner:
         valid_loss, avg_loss, metric = 0, 0, 0
         if self.task_id is None:
             self.task_id = progress.add_task(
-                "[cyan]Validating", total=num_batches, speed="--", loss="--"
+                "[bold cyan]Validating", total=num_batches, speed="--", loss="--"
             )
         else:
             progress.reset(self.task_id)
             progress.update(
-                self.task_id, description="[cyan]Validating", total=num_batches
+                self.task_id, description="[bold cyan]Validating", total=num_batches
             )
 
         # Validation loop
@@ -277,7 +339,7 @@ class Learner:
             refresh_per_second=20,
         ) as live:
             training_epochs = progress_epoch.add_task(
-                "[dark_violet]Epochs", total=epochs, loss=0.0
+                "[bold dark_violet]Epochs", total=epochs, loss=0.0
             )
             for epoch in range(1, epochs + 1):
                 self.current_epoch_num = epoch
@@ -296,9 +358,8 @@ class Learner:
                 live.update(
                     Group(progress_epoch, progress, self.get_epoch_data_table())
                 )
-
-        # Final loss doesn't print in table for some reason
-        console.print(self.get_epoch_data_table())
+                # Have to call this or last iteration won't update for some reason
+                live.refresh()
 
 
 if __name__ == "__main__":

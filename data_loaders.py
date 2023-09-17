@@ -73,17 +73,27 @@ class MNISTImageDataset(TensorDataset):
         return image, label
 
 
-def split_datasets(dataset: TensorDataset, validation_percent: float):
+def split_datasets(
+    dataset: TensorDataset,
+    validation_percent: float,
+    validation_transforms: Union[Callable[[torch.Tensor], torch.Tensor], None] = None,
+):
     training_num, validation_num = math.floor(
         (1 - validation_percent) * len(dataset)
     ), math.floor(0.1 * len(dataset))
     training_num = training_num + (len(dataset) - (training_num + validation_num))
 
-    return torch.utils.data.random_split(
+    train, valid = torch.utils.data.random_split(
         dataset,
         [training_num, validation_num],
         generator=torch.Generator().manual_seed(42),
     )
+
+    if validation_transforms:
+        # My datasets will always have transform
+        valid.transform = validation_transforms  # type: ignore
+
+    return train, valid
 
 
 def label_name_one_hot(label: str, label_dict: dict[str, int]) -> Tensor:
@@ -125,14 +135,14 @@ def get_label_name(label: Tensor, label_dict: dict[str, int]):
 
 
 def preview_data_sample(dataset: TensorDataset, label_dict: dict[str, int]):
-    figure = plt.figure(figsize=(8, 8))
+    figure = plt.figure(figsize=(12, 12))
     cols, rows = 3, 3
     for i in range(1, cols * rows + 1):
         sample_idx = randint(0, len(dataset))
         img, label = dataset[sample_idx]
         figure.add_subplot(rows, cols, i)
         # plt.title(dataset.get_label_name(label.argmax().item()))  # type: ignore
-        plt.title(get_label_name(label, label_dict))
+        plt.title(get_label_name(label, label_dict), fontsize="medium")
         plt.axis("off")
         """
         plt.imshow expects the image tensor to have the shape (height, width, channels), 
@@ -176,6 +186,7 @@ def preview_tested_data_sample(
         plt.title(
             f"Label: {actual_label_name}\nPred (prob): {pred_label_name} ({round(model_confidence.item() * 100,2)}%)",
             color="green" if actual_label_name == pred_label_name else "red",
+            fontsize="medium",
         )
         plt.axis("off")
         plt.imshow(test_image.permute(1, 2, 0).cpu())
