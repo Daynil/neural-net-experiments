@@ -62,8 +62,12 @@ class Learner:
     current_total_epochs: int
     current_epoch_num: int
     task_id: Optional[TaskID] = None
+
     epoch_data: list[EpochData]
     max_epoch_table_rows = 10
+
+    min_valid_loss = float("inf")
+    early_stop_counter = 0
 
     def __init__(
         self,
@@ -74,6 +78,8 @@ class Learner:
         metric_function: Callable[[Tensor, Tensor], Tensor],
         device: Literal["cuda", "cpu"],
         scheduler: Optional[Any] = None,
+        early_stop_patience: Optional[int] = None,
+        early_stop_min_delta: Optional[float] = None,
     ) -> None:
         self.data_loaders = data_loaders
         self.model = model
@@ -86,6 +92,8 @@ class Learner:
         self.timer = Timer()
         self.run_id = generate_random_name()
         self.epoch_data = []
+        self.early_stop_patience = early_stop_patience
+        self.early_stop_min_delta = early_stop_min_delta
 
     def get_epoch_data_table(self):
         epoch_table = Table(title="Epochs")
@@ -294,6 +302,27 @@ class Learner:
 
         return avg_loss, metric
 
+    # TODO: refactor everything not part of core loop to modular callbacks
+    # https://github.com/keras-team/keras/blob/v2.13.1/keras/engine/training.py#L1700
+    def check_early_stop(self, valid_loss: float):
+        """
+        Check if we've hit our early stop thresholds this epoch.
+        """
+        if not self.early_stop_min_delta or not self.early_stop_patience:
+            return False
+
+        if valid_loss < self.min_valid_loss:
+            self.min_valid_loss = valid_loss
+            self.early_stop_counter = 0
+        elif valid_loss > (
+            self.min_valid_loss + (self.min_valid_loss * self.early_stop_min_delta)
+        ):
+            self.early_stop_counter += 1
+            if self.early_stop_counter >= self.early_stop_patience:
+                return True
+
+        return False
+
     def train_model(self, epochs: int):
         self.timer.reset_timer()
         total_timer = Timer()
@@ -360,6 +389,10 @@ class Learner:
                 )
                 # Have to call this or last iteration won't update for some reason
                 live.refresh()
+
+                if self.check_early_stop(valid_loss):
+                    console.print("Early stop threshold reached.")
+                    break
 
 
 if __name__ == "__main__":
