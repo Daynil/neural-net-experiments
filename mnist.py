@@ -6,7 +6,7 @@ from torch import Tensor, nn
 from torchvision.models import resnet18
 from torchvision.transforms import Lambda
 
-import data_loaders
+import data_helpers
 import learning
 from message_queue import ClientRequestQueue, MessageQueue
 
@@ -14,7 +14,7 @@ num_labels = 10  # 0 through 9 are the labels
 
 
 def get_data():
-    dataset = data_loaders.MNISTImageDataset(
+    dataset = data_helpers.MNISTImageDataset(
         annotations_file=Path(r"C:\Users\Danny\ml_datasets\mnist\train\train.txt"),
         img_dir=Path(r"C:\Users\Danny\ml_datasets\mnist\train"),
         # one-hot encode the label (so a 6 turns to tensor 0,0,0,0,0,0,1,0,0,0)
@@ -26,9 +26,9 @@ def get_data():
         # limit_data=5000,
     )
 
-    train_dataset, valid_dataset = data_loaders.split_datasets(dataset, 0.1)
+    train_dataset, valid_dataset = data_helpers.split_datasets(dataset, 0.1)
 
-    test_dataset = data_loaders.MNISTImageDataset(
+    test_dataset = data_helpers.MNISTImageDataset(
         annotations_file=Path(r"C:\Users\Danny\ml_datasets\mnist\test\test.txt"),
         img_dir=Path(r"C:\Users\Danny\ml_datasets\mnist\test"),
         # one-hot encode the label (so a 6 turns to tensor 0,0,0,0,0,0,1,0,0,0)
@@ -131,7 +131,7 @@ def load_and_test_model(model_name: str):
     # print(model.eval())
     model.eval()
 
-    data_loaders.preview_tested_data_sample(test_loader.dataset, model)  # type: ignore
+    data_helpers.preview_tested_data_sample(test_loader.dataset, model)  # type: ignore
 
 
 if __name__ == "__main__":

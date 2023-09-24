@@ -1,8 +1,9 @@
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from time import sleep
-from typing import Any, Callable, Generic, Literal, Optional, TypeVar
+from typing import Any, Callable, Generic, Literal, Optional, TypeVar, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -42,7 +43,7 @@ deinit()
 class DataLoaders(Generic[T]):
     train: DataLoader[T]
     valid: DataLoader[T]
-    test: DataLoader[T]
+    test: Union[DataLoader[T], None] = None
 
 
 @dataclass
@@ -57,7 +58,7 @@ def accuracy(predictions: Tensor, labels: Tensor) -> Tensor:
     return (predictions.argmax(1) == labels.argmax(1).type(torch.float)).sum()
 
 
-class Learner:
+class Learner(Generic[T]):
     run_id: str
     current_total_epochs: int
     current_epoch_num: int
@@ -67,6 +68,7 @@ class Learner:
     max_epoch_table_rows = 10
 
     min_valid_loss = float("inf")
+    min_valid_loss_state: dict[str, Any]
     early_stop_counter = 0
 
     def __init__(
@@ -80,6 +82,7 @@ class Learner:
         scheduler: Optional[Any] = None,
         early_stop_patience: Optional[int] = None,
         early_stop_min_delta: Optional[float] = None,
+        restore_min_loss_state: Optional[bool] = None,
     ) -> None:
         self.data_loaders = data_loaders
         self.model = model
@@ -94,6 +97,7 @@ class Learner:
         self.epoch_data = []
         self.early_stop_patience = early_stop_patience
         self.early_stop_min_delta = early_stop_min_delta
+        self.restore_min_loss_state = restore_min_loss_state
 
     def get_epoch_data_table(self):
         epoch_table = Table(title="Epochs")
@@ -247,12 +251,12 @@ class Learner:
 
         return avg_loss
 
-    def valid_loop(self, progress: Progress):
+    def valid_loop(self, progress: Progress, use_test=False):
         # Setup progress bars and timers
         valid_loader = (
-            self.data_loaders.valid
-            if self.data_loaders.valid
-            else self.data_loaders.test
+            self.data_loaders.test
+            if use_test and self.data_loaders.test
+            else self.data_loaders.valid
         )
         size = len(valid_loader.dataset)  # type: ignore
         num_batches = len(valid_loader)
@@ -302,8 +306,39 @@ class Learner:
 
         return avg_loss, metric
 
+    def get_preds(self, data_loader: DataLoader[T]):
+        num_batches = len(data_loader)
+
+        preds_batches = []
+        labels_batches = []
+
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeRemainingColumn(),
+            TimeElapsedColumn(),
+        ) as progress:
+            task = progress.add_task(
+                "[bold cyan]Making predictions...", total=num_batches
+            )
+
+            self.model.eval()
+            with torch.inference_mode():
+                for batch, (xb, yb) in enumerate(data_loader):
+                    preds_batches.append(self.model(xb.to(self.device)))
+                    labels_batches.append(yb.to(self.device))
+
+                    progress.update(task, advance=1)
+
+        # These are a list of tensor batches
+        # Combine them into a single tensor before returning
+        return torch.cat(preds_batches), torch.cat(labels_batches)
+
     # TODO: refactor everything not part of core loop to modular callbacks
     # https://github.com/keras-team/keras/blob/v2.13.1/keras/engine/training.py#L1700
+    # https://github.com/keras-team/keras/blob/v2.13.1/keras/callbacks.py#L622
     def check_early_stop(self, valid_loss: float):
         """
         Check if we've hit our early stop thresholds this epoch.
@@ -314,11 +349,19 @@ class Learner:
         if valid_loss < self.min_valid_loss:
             self.min_valid_loss = valid_loss
             self.early_stop_counter = 0
+
+            if self.restore_min_loss_state:
+                self.min_valid_loss_state = deepcopy(self.model.state_dict())
+
         elif valid_loss > (
             self.min_valid_loss + (self.min_valid_loss * self.early_stop_min_delta)
         ):
             self.early_stop_counter += 1
             if self.early_stop_counter >= self.early_stop_patience:
+                if self.restore_min_loss_state:
+                    print("Restored min valid loss weights.")
+                    self.model.load_state_dict(self.min_valid_loss_state)
+
                 return True
 
         return False
@@ -363,6 +406,8 @@ class Learner:
             transient=False,
         )
 
+        stopped_early = False
+
         with Live(
             Group(progress_epoch, progress, self.get_epoch_data_table()),
             refresh_per_second=20,
@@ -391,8 +436,24 @@ class Learner:
                 live.refresh()
 
                 if self.check_early_stop(valid_loss):
+                    stopped_early = True
                     console.print("Early stop threshold reached.")
                     break
+
+                if epoch == epochs + 1:
+                    if (
+                        not stopped_early
+                        and self.restore_min_loss_state
+                        and self.min_valid_loss != valid_loss
+                    ):
+                        print("Restored min valid loss weights.")
+                        self.model.load_state_dict(self.min_valid_loss_state)
+
+    def save_model(self, path: Path):
+        torch.save(self.model, path)
+
+    def load_model(self, path: Path):
+        self.model = torch.load(path)
 
 
 if __name__ == "__main__":
